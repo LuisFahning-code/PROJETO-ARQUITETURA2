@@ -71,7 +71,7 @@ def executar_programa(arquivo_instrucoes, arquivo_registradores, arquivo_log="sa
     with open(arquivo_instrucoes, 'r') as f_instrucoes, \
          open(arquivo_log, 'w') as f_log:
 
-        instrucoes = [l.strip() for l in f_instrucoes if l.strip()]
+        instrucoes = [l.strip() for l in f_instrucoes if l.strip() and not l.startswith('#')]
 
         for instrucao in instrucoes:
             f_log.write(instrucao + "\n")
@@ -109,7 +109,7 @@ def executar_programa(arquivo_instrucoes, arquivo_registradores, arquivo_log="sa
             escrever_registradores(f_log, regs)
             f_log.write("\n")
 
-            # Decodificação da ULA — formato: SLL8 SRA1 F0 F1 ENA ENB INVA INC
+            # Decodificação da ULA — formato: SLL8 SRA1 F1 F0 ENA ENB INVA INC
             SLL8 = int(ula_bits[0])
             SRA1 = int(ula_bits[1])
             F1   = int(ula_bits[2])
@@ -132,7 +132,7 @@ def executar_programa(arquivo_instrucoes, arquivo_registradores, arquivo_log="sa
             escrever_registradores(f_log, regs)
             f_log.write("=" * 53 + "\n")
 
-        f_log.write(f"Cycle {ciclo}\n")
+        f_log.write(f"Cycle {ciclo + 1}\n")
         f_log.write("No more lines, EOP.\n")
 
     print(f"Execução concluída. Log salvo em '{arquivo_log}'")

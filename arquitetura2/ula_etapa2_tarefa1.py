@@ -55,8 +55,8 @@ def executar_programa(arquivo_instrucoes, A_init, B_init, arquivo_log="saida_eta
             f_log.write(f"PC = {PC}\n")
             f_log.write(f"IR = {IR}\n")
 
-            # Decodificação — formato: SLL8 SRA1 F0 F1 ENA ENB INVA INC
-            #                posição:     0    1  2  3   4   5    6   7
+            # Decodificação — formato: SLL8 SRA1 F1 F0 ENA ENB INVA INC
+            #                posição:     0    1   2  3   4   5    6   7
             SLL8 = int(IR[0])
             SRA1 = int(IR[1])
             F1   = int(IR[2])

@@ -1,0 +1,324 @@
+================================================================================
+  RESUMO DO PROJETO - SIMULADOR MIC-1 (ARQUITETURA DE COMPUTADORES 2)
+  Professora: Sarah Pontes
+  Grupo: Luis Felipe Fahning, Guilherme de Sousa, Caio Figueiredo
+================================================================================
+
+
+================================================================================
+1. VISAO GERAL DO PROJETO
+================================================================================
+
+Simulamos o caminho de dados da Mic-1 (arquitetura do livro do Tanenbaum) em
+3 etapas progressivas, todas implementadas em Python.
+
+  Etapa 1     : ULA de 32 bits com 6 bits de controle
+  Etapa 2 T1  : ULA + Deslocador + Flags N e Z (8 bits de controle)
+  Etapa 2 T2  : Caminho de dados completo com registradores da Mic-1
+
+
+================================================================================
+2. ETAPA 1 -- ula_etapa1.py
+================================================================================
+
+Simula a ULA (Unidade Logica e Aritmetica) de 32 bits com somador ripple-carry.
+
+Formato da instrucao (6 bits):
+  F1  F0  ENA  ENB  INVA  INC
+   0   1   2    3    4     5
+
+Tabela de controle:
+  ENA  = Habilita entrada A na ULA (0 = forca A = 0)
+  ENB  = Habilita entrada B na ULA (0 = forca B = 0)
+  INVA = Inverte bit a bit a entrada A (NOT A)
+  INC  = Carry-in inicial (equivale a somar +1)
+  F1 F0 = Seleciona operacao:
+            00 = AND
+            01 = OR
+            10 = NOT B
+            11 = ADD (soma aritmetica)
+
+Saidas: s (resultado 32 bits) e co (carry-out do bit 31).
+
+
+================================================================================
+3. ETAPA 2 TAREFA 1 -- ula_etapa2_tarefa1.py
+================================================================================
+
+Estende a etapa 1 com 8 bits de controle, adicionando deslocador e flags.
+
+Formato da instrucao (8 bits):
+  SLL8  SRA1  F1  F0  ENA  ENB  INVA  INC
+    0     1    2   3   4    5    6     7
+
+Novos bits:
+  SLL8 = Desloca resultado 8 bits a esquerda (deslocamento logico)
+  SRA1 = Desloca resultado 1 bit a direita (deslocamento aritmetico,
+          preserva bit de sinal)
+
+Regra: SLL8=1 e SRA1=1 simultaneamente e invalido (erro).
+
+Novas saidas:
+  sd = resultado APOS o deslocador
+  n  = flag Negativo (sd e negativo em complemento de 2)
+  z  = flag Zero (sd == 0)
+
+
+================================================================================
+4. ETAPA 2 TAREFA 2 -- datapath_etapa2_tarefa2.py
+================================================================================
+
+Simula o caminho de dados completo da Mic-1 com todos os registradores.
+
+Formato da microinstrucao (21 bits):
+  [8 bits ULA] [9 bits barramento C] [4 bits barramento B]
+
+------------------------------------------------------
+Barramento B (4 bits -- qual registrador entra na ULA como operando B):
+  0 = MDR   1 = PC    2 = MBR   3 = MBRU
+  4 = SP    5 = LV    6 = CPP   7 = TOS   8 = OPC
+
+Barramento C (9 bits -- quais registradores recebem o resultado da ULA):
+  bit 8 = H     bit 7 = OPC   bit 6 = TOS   bit 5 = CPP
+  bit 4 = LV    bit 3 = SP    bit 2 = PC    bit 1 = MDR   bit 0 = MAR
+
+IMPORTANTE: A entrada A da ULA e SEMPRE H (fixo em hardware).
+            A entrada B vem do barramento B.
+------------------------------------------------------
+
+
+================================================================================
+5. OS REGISTRADORES -- O QUE E CADA UM
+================================================================================
+
+PC -- Program Counter
+  Aponta para o endereco do proximo byte de instrucao IJVM a ser buscado na
+  memoria. A cada instrucao buscada, e incrementado. Nao guarda a instrucao
+  em si, apenas onde ela esta na memoria.
+
+MBR -- Memory Buffer Register (8 bits)
+  Guarda o byte buscado da memoria no endereco apontado pelo PC. E sempre 8
+  bits porque os opcodes IJVM sao de 1 byte. Quando aparece no barramento B,
+  pode ser lido de duas formas:
+    MBR  : extensao com SINAL (bit 7 se propaga para bits 8-31)
+              Exemplo: 10000001 -> 11111111111111111111111110000001 (= -127)
+    MBRU : extensao com ZEROS (bits 8-31 = 0)
+              Exemplo: 10000001 -> 00000000000000000000000010000001 (= +129)
+
+MAR -- Memory Address Register
+  Guarda o endereco de memoria para operacoes de leitura/escrita de DADOS.
+  Quando voce quer ler ou escrever algo na pilha ou nas variaveis locais,
+  coloca o endereco em MAR.
+
+MDR -- Memory Data Register
+  Guarda o dado que veio da memoria ou que vai ser escrito nela.
+  Funciona em par com MAR:
+    Leitura : o resultado aparece em MDR apos a operacao
+    Escrita : voce coloca o valor em MDR antes de iniciar a escrita
+
+  DIFERENCA PC/MBR vs MAR/MDR:
+    PC e MBR sao exclusivos para BUSCA DE INSTRUCOES (bytecode IJVM).
+    MAR e MDR sao exclusivos para ACESSO A DADOS (pilha, variaveis locais).
+
+SP -- Stack Pointer
+  Aponta para o topo da pilha de operandos na memoria. A IJVM e uma maquina
+  baseada em pilha -- as operacoes consomem e produzem valores no topo.
+
+LV -- Local Variable (pointer)
+  Aponta para a base do array de variaveis locais do metodo atual.
+  Para acessar a variavel local 0, usa-se LV+0; variavel 1, LV+1; etc.
+  Usado pelas instrucoes ILOAD e ISTORE.
+
+CPP -- Constant Pool Pointer
+  Aponta para a area do pool de constantes na memoria, onde ficam constantes
+  usadas pelo programa.
+
+TOS -- Top Of Stack
+  Guarda uma copia em cache do valor no topo da pilha. Evita a necessidade de
+  ler a memoria toda vez que o topo e acessado. E uma otimizacao de desempenho.
+
+OPC -- Old PC / Opcode register
+  Registrador temporario de uso geral do microprograma. Nao tem funcao
+  especial em hardware. Usado como rascunho pelo microprograma.
+  Exemplo: na instrucao BIPUSH, OPC = PC salva o valor atual de PC enquanto
+  PC e avancado para buscar o byte operando.
+
+H -- Holding register
+  A entrada A da ULA e SEMPRE H (fixo em hardware). Para qualquer operacao
+  que usa dois operandos, voce carrega um deles em H primeiro, depois usa
+  H op B no ciclo seguinte. H e o "acumulador do lado esquerdo" da ULA.
+
+
+================================================================================
+6. COMO LER OS ARQUIVOS DE SAIDA (LOGS)
+================================================================================
+
+--- saida_etapa1.txt ---
+
+  b = 00000000000000000000000000000001   <- valor inicial de B
+  a = 11111111111111111111111111111111   <- valor inicial de A
+
+  Cycle 1
+  PC = 1            <- numero da instrucao
+  IR = 111110       <- instrucao de 6 bits executada
+  b = ...           <- valor de B
+  a = ...           <- valor de A
+  s = ...           <- resultado da ULA (32 bits)
+  co = 0            <- carry-out do bit 31
+
+--- saida_etapa2_tarefa1.txt ---
+  (igual a etapa 1, mais:)
+  sd = ...          <- resultado APOS o deslocador (SLL8 ou SRA1)
+  n = 1             <- flag negativo (sd e negativo em complemento de 2)
+  z = 0             <- flag zero (sd == 0)
+
+--- saida_etapa2_tarefa2.txt ---
+
+  > Initial register states        <- estado inicial dos 10 registradores
+
+  Cycle 1
+  ir = 00110100 000011000 0010     <- instrucao dividida em 3 partes
+                                      [ULA 8 bits] [C-bus 9 bits] [B-bus 4 bits]
+
+  b_bus = mbr                      <- registrador que alimenta entrada B
+  c_bus = lv, sp                   <- registradores que recebem o resultado
+
+  > Registers before instruction   <- estado antes
+  > Registers after instruction    <- estado depois (so LV e SP mudaram)
+
+
+================================================================================
+7. PERGUNTAS E RESPOSTAS PARA A APRESENTACAO
+================================================================================
+
+Q: Para que serve a inabilitacao da entrada B (ENB=0)?
+A: Quando ENB=0, todos os bits de B sao forcados a 0 dentro da ULA, como se
+   B nao existisse. Isso permite operacoes que usam so A -- por exemplo, NOT(A)
+   sem que B interfira. Se ENB ficasse habilitado, o valor de B seria incluido
+   na operacao OR ou ADD e corromperia o resultado.
+
+------------------------------------------------------------
+
+Q: Como funciona a instrucao DUP?
+A: DUP duplica o valor do topo da pilha. O microprograma:
+   1. Incrementa SP (abre espaco na pilha)
+   2. MAR = SP (aponta para a nova posicao)
+   3. MDR = TOS (copia o valor do topo)
+   4. Escreve MDR na memoria
+   5. TOS continua com o mesmo valor
+   Resultado: o mesmo valor esta no topo E uma posicao abaixo.
+
+------------------------------------------------------------
+
+Q: Qual a diferenca entre MBR e MBRU?
+A: Ambos leem o mesmo registrador fisico de 8 bits (MBR). A diferenca e como
+   os 24 bits superiores sao preenchidos ao expandir para 32 bits:
+     MBR  : extensao com SINAL -- bit 7 se propaga.
+               10000001 -> 11111111111111111111111110000001 (= -127)
+     MBRU : extensao com ZEROS -- bits 8-31 ficam em 0.
+               10000001 -> 00000000000000000000000010000001 (= +129)
+   Demonstrado na saida_etapa2_tarefa2.txt:
+     Ciclo 1 usa MBR  -> SP vira -127 (11111111...10000001)
+     Ciclo 2 usa MBRU -> SP vira +129 (00000000...10000001)
+
+------------------------------------------------------------
+
+Q: Como funciona a instrucao BIPUSH?
+A: BIPUSH empurra um byte literal (constante) na pilha. O byte vem logo apos
+   o opcode na memoria. O microprograma:
+   1. OPC = PC              (salva PC como rascunho em OPC)
+   2. PC = PC + 1           (avanca PC para o byte operando)
+   3. (busca o byte -> MBR) (operacao de memoria: le o byte)
+   4. SP = SP + 1           (abre espaco na pilha)
+   5. MAR = SP, MDR = MBR   (sign-extend do byte e prepara escrita)
+   6. Escreve MDR na memoria
+   7. TOS = MDR             (atualiza cache do topo)
+
+------------------------------------------------------------
+
+Q: Para que serve MDR?
+A: MDR e o buffer de dados entre a CPU e a memoria de dados. Toda leitura da
+   memoria de dados (pilha, variaveis) faz o dado aparecer em MDR; toda escrita
+   exige que o dado esteja em MDR antes de iniciar. Sem MDR, os registradores
+   teriam que ficar conectados diretamente ao barramento de memoria, o que
+   tornaria o design de hardware muito mais complexo.
+
+------------------------------------------------------------
+
+Q: O que aconteceria se as palavras tivessem 16 bits?
+A: - A ULA teria 16 estagios no somador ripple-carry (ao inves de 32).
+   - Todos os registradores (MAR, MDR, PC, SP, LV, etc.) seriam de 16 bits.
+   - O espaco de enderecamento maximo seria 2^16 = 65.536 posicoes (64 KB).
+   - Overflow ocorreria ao ultrapassar +/-32.767 (ao inves de +/-2^31).
+   - MBR continuaria sendo 8 bits, mas a extensao de sinal iria ate 16 bits.
+   - Programas maiores ou pilhas mais profundas simplesmente nao caberiam
+     no espaco de memoria disponivel.
+
+------------------------------------------------------------
+
+Q: Para que serve H?
+A: H e o unico registrador conectado a entrada A (esquerda) da ULA -- isso e
+   fixo em hardware. Qualquer operacao que precisa de dois operandos exige que
+   um deles seja carregado em H primeiro. H funciona como o "acumulador do
+   lado esquerdo": voce prepara H em um microciclo, depois usa H op B no
+   microciclo seguinte. Sem H, nao haveria como especificar os dois operandos
+   da ULA usando apenas o barramento B (que so transporta um valor por ciclo).
+
+------------------------------------------------------------
+
+Q: Para que serve OPC?
+A: OPC e um registrador temporario de rascunho do microprograma. Nao tem
+   funcao especial no hardware -- ele existe porque o microprograma
+   frequentemente precisa salvar um valor enquanto usa os outros registradores
+   para outra finalidade. Exemplo classico: na instrucao BIPUSH, o microprograma
+   faz OPC = PC para nao perder o PC enquanto o incrementa para buscar o
+   operando. Tambem pode ser usado para guardar o opcode enquanto ele e
+   decodificado.
+
+------------------------------------------------------------
+
+Q: Por que o acesso a memoria tem atraso no Mic-1 real?
+A: A memoria RAM e muito mais lenta que a CPU. No Mic-1 real, quando voce
+   coloca um endereco em MAR e inicia uma leitura, os dados so aparecem em
+   MDR no CICLO DE CLOCK SEGUINTE. Por isso muitas microinstrucoes sao
+   estruturadas para fazer um trabalho util (calculo na ULA) enquanto a
+   memoria processa a requisicao -- e uma forma de esconder a latencia da
+   memoria. Na nossa simulacao esse atraso nao e modelado (acesso imediato).
+
+------------------------------------------------------------
+
+Q: Para que serve LV?
+A: LV aponta para a base do frame de variaveis locais do metodo em execucao.
+   A instrucao ILOAD n, por exemplo, calcula MAR = LV + n e le o dado na
+   memoria. Sem LV, nao haveria como saber onde as variaveis locais de cada
+   metodo estao na memoria, inviabilizando chamadas de funcao e recursao.
+
+------------------------------------------------------------
+
+Q: Quanto tempo dura cada microinstrucao?
+A: Cada microinstrucao dura exatamente 1 ciclo de clock. Dentro desse ciclo:
+   1. O barramento B e carregado com o valor do registrador selecionado
+   2. A ULA e o deslocador computam o resultado (logica combinacional)
+   3. No final do ciclo (borda de subida do clock) o resultado e gravado
+      nos registradores habilitados pelo barramento C
+   O tempo fisico do ciclo e determinado pelo caminho combinacional mais
+   longo -- tipicamente ULA + deslocador.
+
+------------------------------------------------------------
+
+Q: Qual a diferenca entre PC, MBR e MAR, MDR?
+
+  Registrador | Para que serve                          | Tamanho
+  ------------|-----------------------------------------|---------
+  PC          | Endereco do proximo opcode IJVM a buscar| 32 bits
+  MBR         | Byte buscado da memoria de instrucoes   |  8 bits
+  MAR         | Endereco para acesso a memoria de dados | 32 bits
+  MDR         | Dado lido/escrito na memoria de dados   | 32 bits
+
+  Resumo: PC/MBR lidam com o FLUXO DE INSTRUCOES (bytecode).
+          MAR/MDR lidam com o ACESSO A DADOS (pilha, variaveis locais).
+
+
+================================================================================
+FIM DO DOCUMENTO
+================================================================================

@@ -1,0 +1,9 @@
+# Etapa 3 Tarefa 1 - Sequência de teste com READ e WRITE
+# Estado inicial: H=5, LV=1, SP=2, mem[1]=1, mem[2]=3
+#
+# Passo 1: H = LV  (H <- 1)
+00110100100000000000101
+# Passo 2: MAR = H; rd  (MAR <- 1, MDR <- mem[1] = 1)
+00111000000000001010000
+# Passo 3: MAR = SP = SP+1; wr  (SP=MAR=3, mem[3] <- MDR = 1)
+00110101000001001100100
